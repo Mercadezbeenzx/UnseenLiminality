@@ -37,7 +37,7 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
     Name = "Unseen Liminality",
     LoadingTitle = "By M00KIE",
-    LoadingSubtitle = " ",
+    LoadingSubtitle = "😹✌️",
     ConfigurationSaving = { Enabled = false },
     KeySystem = false
 })
@@ -48,7 +48,7 @@ MainTab:CreateSection("Stamina Rates (Per Second)")
 
 MainTab:CreateSlider({
     Name = "Stamina Loss Rate",
-    Range = {0, 100},
+    Range = {0, 50},
     Increment = 0.5,
     Suffix = " /sec",
     CurrentValue = CustomRates.DrainRate * 10,
@@ -60,7 +60,7 @@ MainTab:CreateSlider({
 
 MainTab:CreateSlider({
     Name = "Stamina Gain Rate",
-    Range = {0, 100},
+    Range = {0, 50},
     Increment = 0.5,
     Suffix = " /sec",
     CurrentValue = CustomRates.RegenRate * 10,
