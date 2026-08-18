@@ -12,7 +12,7 @@ local CustomRates = {
 local realStamina = GlobalCData.Stamina or 100
 local lastStamina = realStamina
 
-task.spawn(function()
+local staminaThread = task.spawn(function()
     while task.wait() do
         local current = GlobalCData.Stamina
         if current ~= lastStamina then
@@ -86,5 +86,17 @@ MainTab:CreateButton({
         CustomRates.DrainRate = 0.4
         CustomRates.RegenRate = 1.0
         Rayfield:Notify({ Title = "Stamina", Content = "Reset to standard values.", Duration = 2 })
+    end,
+})
+
+MainTab:CreateSection("Settings")
+
+MainTab:CreateButton({
+    Name = "Unload GUI",
+    Callback = function()
+        if staminaThread then
+            task.cancel(staminaThread)
+        end
+        Rayfield:Destroy()
     end,
 })
