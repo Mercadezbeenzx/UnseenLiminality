@@ -43,16 +43,19 @@ local overrideJumpPower = false
 
 -- Dynamic Animation Settings
 local dynamicAnimEnabled = false
-local animSpeedMultiplier = 1.0
 local baseWalkSpeed = 16
 
 local noclipConnection = nil
 local movementConnection = nil
 local animConnection = nil
 
+local function getLocalCharacter()
+    return LocalPlayer.Character or GlobalCData.Character
+end
+
 noclipConnection = RunService.Stepped:Connect(function()
     if isNoclipping then
-        local char = GlobalCData.Character or LocalPlayer.Character
+        local char = getLocalCharacter()
         if char then
             for _, v in ipairs(char:GetDescendants()) do
                 if v:IsA("BasePart") then
@@ -64,7 +67,7 @@ noclipConnection = RunService.Stepped:Connect(function()
 end)
 
 movementConnection = RunService.RenderStepped:Connect(function()
-    local char = GlobalCData.Character or LocalPlayer.Character
+    local char = getLocalCharacter()
     if char then
         local hum = char:FindFirstChildOfClass("Humanoid")
         if hum then
@@ -81,13 +84,13 @@ end)
 
 animConnection = RunService.Stepped:Connect(function()
     if dynamicAnimEnabled then
-        local char = GlobalCData.Character or LocalPlayer.Character
+        local char = getLocalCharacter()
         if char then
             local hum = char:FindFirstChildOfClass("Humanoid")
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if hum and hrp then
                 local currentVelocity = (hrp.AssemblyLinearVelocity * Vector3.new(1, 0, 1)).Magnitude
-                local calculatedSpeed = (currentVelocity / baseWalkSpeed) * animSpeedMultiplier
+                local calculatedSpeed = currentVelocity / baseWalkSpeed
                 if currentVelocity < 0.1 then
                     calculatedSpeed = 1.0
                 end
@@ -166,6 +169,7 @@ MainTab:CreateButton({
 local VisualsTab = Window:CreateTab("Visuals", 4483362458)
 
 local activeHighlights = {}
+local eventConnections = {}
 
 local function clearHighlights()
     for _, hl in ipairs(activeHighlights) do
@@ -185,44 +189,83 @@ local npcOutlineColor = Color3.fromRGB(255, 255, 255)
 local playerFillColor = Color3.fromRGB(0, 200, 255)
 local playerOutlineColor = Color3.fromRGB(255, 255, 255)
 
+local function highlightModel(model, isPlayer)
+    if not model or model == getLocalCharacter() then return end
+    
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    if not isPlayer and npcHighlightsEnabled then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "NPCHighlight"
+        highlight.Adornee = model
+        highlight.FillColor = npcFillColor
+        highlight.FillTransparency = 0.5
+        highlight.OutlineColor = npcOutlineColor
+        highlight.OutlineTransparency = 0
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.Parent = model
+        table.insert(activeHighlights, highlight)
+    elseif isPlayer and playerHighlightsEnabled then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "PlayerHighlight"
+        highlight.Adornee = model
+        highlight.FillColor = playerFillColor
+        highlight.FillTransparency = 0.5
+        highlight.OutlineColor = playerOutlineColor
+        highlight.OutlineTransparency = 0
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.Parent = model
+        table.insert(activeHighlights, highlight)
+    end
+end
+
 local function applyHighlights()
     clearHighlights()
     
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj ~= LocalPlayer.Character then
-            local hum = obj:FindFirstChildOfClass("Humanoid")
+        if obj:IsA("Model") then
             local isPlayer = Players:GetPlayerFromCharacter(obj) ~= nil
-            
-            if hum then
-                if not isPlayer and npcHighlightsEnabled then
-                    local highlight = Instance.new("Highlight")
-                    highlight.Name = "NPCHighlight"
-                    highlight.Adornee = obj
-                    highlight.FillColor = npcFillColor
-                    highlight.FillTransparency = 0.5
-                    highlight.OutlineColor = npcOutlineColor
-                    highlight.OutlineTransparency = 0
-                    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                    highlight.Parent = obj
-                    
-                    table.insert(activeHighlights, highlight)
-                elseif isPlayer and playerHighlightsEnabled then
-                    local highlight = Instance.new("Highlight")
-                    highlight.Name = "PlayerHighlight"
-                    highlight.Adornee = obj
-                    highlight.FillColor = playerFillColor
-                    highlight.FillTransparency = 0.5
-                    highlight.OutlineColor = playerOutlineColor
-                    highlight.OutlineTransparency = 0
-                    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                    highlight.Parent = obj
-                    
-                    table.insert(activeHighlights, highlight)
-                end
-            end
+            highlightModel(obj, isPlayer)
         end
     end
 end
+
+-- Auto Listeners for Respawn / New Players
+local function setupAutoHighlighting()
+    for _, conn in ipairs(eventConnections) do
+        conn:Disconnect()
+    end
+    eventConnections = {}
+
+    local function onCharacterAdded(char, plr)
+        task.wait(0.5)
+        if playerHighlightsEnabled then
+            highlightModel(char, true)
+        end
+    end
+
+    local function onPlayerAdded(plr)
+        local conn = plr.CharacterAdded:Connect(function(char)
+            onCharacterAdded(char, plr)
+        end)
+        table.insert(eventConnections, conn)
+        if plr.Character then
+            onCharacterAdded(plr.Character, plr)
+        end
+    end
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            onPlayerAdded(plr)
+        end
+    end
+
+    local pAddConn = Players.PlayerAdded:Connect(onPlayerAdded)
+    table.insert(eventConnections, pAddConn)
+end
+
+setupAutoHighlighting()
 
 VisualsTab:CreateSection("Toggles")
 
@@ -326,7 +369,7 @@ local WalkSpeedSlider = UtilityTab:CreateSlider({
         customWalkSpeed = Value
         overrideWalkSpeed = (Value ~= 16)
         
-        local char = GlobalCData.Character or LocalPlayer.Character
+        local char = getLocalCharacter()
         if char then
             local hum = char:FindFirstChildOfClass("Humanoid")
             if hum then
@@ -347,7 +390,7 @@ local JumpPowerSlider = UtilityTab:CreateSlider({
         customJumpPower = Value
         overrideJumpPower = (Value ~= 50)
         
-        local char = GlobalCData.Character or LocalPlayer.Character
+        local char = getLocalCharacter()
         if char then
             local hum = char:FindFirstChildOfClass("Humanoid")
             if hum then
@@ -369,7 +412,7 @@ UtilityTab:CreateButton({
     end,
 })
 
-UtilityTab:CreateSection("Animation Speed Controls")
+UtilityTab:CreateSection("Animation Controls")
 
 UtilityTab:CreateToggle({
     Name = "Dynamic Animation Scaling",
@@ -378,7 +421,7 @@ UtilityTab:CreateToggle({
     Callback = function(Value)
         dynamicAnimEnabled = Value
         if not Value then
-            local char = GlobalCData.Character or LocalPlayer.Character
+            local char = getLocalCharacter()
             if char then
                 local hum = char:FindFirstChildOfClass("Humanoid")
                 if hum then
@@ -391,28 +434,7 @@ UtilityTab:CreateToggle({
                 end
             end
         end
-        Rayfield:Notify({ Title = "Animations", Content = Value and "Velocity Scaling Enabled" or "Reset to Normal", Duration = 2 })
-    end,
-})
-
-local AnimMultiplierSlider = UtilityTab:CreateSlider({
-    Name = "Animation Speed Multiplier",
-    Range = {0.1, 5},
-    Increment = 0.1,
-    Suffix = "x",
-    CurrentValue = 1.0,
-    Flag = "AnimMultiplierSlider",
-    Callback = function(Value)
-        animSpeedMultiplier = Value
-    end,
-})
-
-UtilityTab:CreateButton({
-    Name = "Reset Animation Settings",
-    Callback = function()
-        AnimMultiplierSlider:Set(1.0)
-        dynamicAnimEnabled = false
-        Rayfield:Notify({ Title = "Animations", Content = "Reset multiplier to 1.0x.", Duration = 2 })
+        Rayfield:Notify({ Title = "Animations", Content = Value and "Dynamic Scaling Enabled" or "Reset to Normal", Duration = 2 })
     end,
 })
 
@@ -421,6 +443,7 @@ UtilityTab:CreateSection("Teleportation")
 local targetPlayerTP = nil
 local playerTPMap = {}
 local playerTPNames = {}
+local playerTPDropdown = nil
 
 local function updatePlayerTPList()
     playerTPMap = {}
@@ -435,11 +458,14 @@ local function updatePlayerTPList()
     if #playerTPNames == 0 then
         table.insert(playerTPNames, "No Players Found")
     end
+    if playerTPDropdown then
+        playerTPDropdown:Refresh(playerTPNames)
+    end
 end
 
 updatePlayerTPList()
 
-local playerTPDropdown = UtilityTab:CreateDropdown({
+playerTPDropdown = UtilityTab:CreateDropdown({
     Name = "Select Player to Teleport",
     Options = playerTPNames,
     CurrentOption = playerTPNames[1] or "No Players Found",
@@ -450,11 +476,23 @@ local playerTPDropdown = UtilityTab:CreateDropdown({
     end,
 })
 
+-- Dynamic Player List Update Listeners
+local tpPlayerAddedConn = Players.PlayerAdded:Connect(function()
+    task.wait(0.5)
+    updatePlayerTPList()
+end)
+table.insert(eventConnections, tpPlayerAddedConn)
+
+local tpPlayerRemovingConn = Players.PlayerRemoving:Connect(function()
+    task.wait(0.1)
+    updatePlayerTPList()
+end)
+table.insert(eventConnections, tpPlayerRemovingConn)
+
 UtilityTab:CreateButton({
     Name = "Refresh Player List",
     Callback = function()
         updatePlayerTPList()
-        playerTPDropdown:Refresh(playerTPNames)
     end,
 })
 
@@ -463,7 +501,7 @@ UtilityTab:CreateButton({
     Callback = function()
         if targetPlayerTP and targetPlayerTP.Character then
             local targetHRP = targetPlayerTP.Character:FindFirstChild("HumanoidRootPart")
-            local myChar = GlobalCData.Character or LocalPlayer.Character
+            local myChar = getLocalCharacter()
             if myChar and targetHRP then
                 local myHRP = myChar:FindFirstChild("HumanoidRootPart")
                 if myHRP then
@@ -491,9 +529,15 @@ SettingsTab:CreateButton({
         if noclipConnection then noclipConnection:Disconnect() end
         if movementConnection then movementConnection:Disconnect() end
         if animConnection then animConnection:Disconnect() end
+        
+        for _, conn in ipairs(eventConnections) do
+            conn:Disconnect()
+        end
+        eventConnections = {}
+        
         clearHighlights()
         
-        local char = GlobalCData.Character or LocalPlayer.Character
+        local char = getLocalCharacter()
         if char then
             local hum = char:FindFirstChildOfClass("Humanoid")
             if hum then
