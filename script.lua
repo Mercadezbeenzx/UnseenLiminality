@@ -119,22 +119,12 @@ local function clearHighlights()
     activeHighlights = {}
 end
 
-local spectateTrackerThread = nil
-
 MainTab:CreateButton({
     Name = "Unload GUI",
     Callback = function()
         if staminaThread then task.cancel(staminaThread) end
-        if spectateTrackerThread then task.cancel(spectateTrackerThread) end
         if noclipConnection then noclipConnection:Disconnect() end
         clearHighlights()
-        
-        local camera = workspace.CurrentCamera
-        local char = GlobalCData.Character or LocalPlayer.Character
-        if camera and char then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then camera.CameraSubject = hum end
-        end
         
         Rayfield:Destroy()
     end,
@@ -368,139 +358,14 @@ UtilityTab:CreateButton({
             if myChar and targetHRP then
                 local myHRP = myChar:FindFirstChild("HumanoidRootPart")
                 if myHRP then
-                    myHRP.CFrame = targetHRP.CFrame + Vector3.new(0, 2, 3)
-                    Rayfield:Notify({ Title = "Teleported", Content = "Arrived at " .. targetPlayerTP.Name, Duration = 2 })
+                    local targetPos = targetHRP.Position + Vector3.new(0, 2, 3)
+                    task.spawn(function()
+                        LocalPlayer:RequestStreamAroundAsync(targetPos)
+                        myHRP.CFrame = CFrame.new(targetPos)
+                        Rayfield:Notify({ Title = "Teleported", Content = "Arrived at " .. targetPlayerTP.Name, Duration = 2 })
+                    end)
                 end
             end
         end
     end,
 })
-
-UtilityTab:CreateSection("Spectate HUD & Controls")
-
-local spectateTargets = {}
-local currentIndex = 1
-local isSpectating = false
-
-local function scanSpectateTargets()
-    spectateTargets = {}
-    
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character then
-            local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-            if hum and hrp then
-                table.insert(spectateTargets, {
-                    Name = plr.DisplayName .. " (@" .. plr.Name .. ")",
-                    Humanoid = hum,
-                    RootPart = hrp,
-                    Model = plr.Character,
-                    Type = "Player"
-                })
-            end
-        end
-    end
-    
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj ~= LocalPlayer.Character then
-            local hum = obj:FindFirstChildOfClass("Humanoid")
-            local hrp = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart
-            local isPlayer = Players:GetPlayerFromCharacter(obj) ~= nil
-            
-            if hum and hrp and not isPlayer then
-                table.insert(spectateTargets, {
-                    Name = "[NPC] " .. obj.Name,
-                    Humanoid = hum,
-                    RootPart = hrp,
-                    Model = obj,
-                    Type = "NPC"
-                })
-            end
-        end
-    end
-end
-
-scanSpectateTargets()
-
-local targetLabel = UtilityTab:CreateLabel("◀   Self (Local Player)   ▶", 4483362458)
-local statsLabel = UtilityTab:CreateLabel("Speed: 0.0 | Health: --/-- | Distance: 0 studs", 4483362458)
-
-local function updateSpectateView()
-    if not isSpectating or #spectateTargets == 0 then
-        targetLabel:Set("◀   Self (Local Player)   ▶", 4483362458)
-        statsLabel:Set("Speed: 0.0 | Health: --/-- | Distance: 0 studs", 4483362458)
-        local char = GlobalCData.Character or LocalPlayer.Character
-        if char then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then workspace.CurrentCamera.CameraSubject = hum end
-        end
-        return
-    end
-    
-    if currentIndex < 1 then currentIndex = #spectateTargets end
-    if currentIndex > #spectateTargets then currentIndex = 1 end
-    
-    local data = spectateTargets[currentIndex]
-    if data and data.Humanoid then
-        workspace.CurrentCamera.CameraSubject = data.Humanoid
-        targetLabel:Set("◀   " .. data.Name .. "   ▶", 4483362458)
-    end
-end
-
-UtilityTab:CreateButton({
-    Name = "◀  Previous Target",
-    Callback = function()
-        scanSpectateTargets()
-        if #spectateTargets > 0 then
-            isSpectating = true
-            currentIndex = currentIndex - 1
-            updateSpectateView()
-        end
-    end,
-})
-
-UtilityTab:CreateButton({
-    Name = "Next Target  ▶",
-    Callback = function()
-        scanSpectateTargets()
-        if #spectateTargets > 0 then
-            isSpectating = true
-            currentIndex = currentIndex + 1
-            updateSpectateView()
-        end
-    end,
-})
-
-UtilityTab:CreateButton({
-    Name = "Stop Spectating (View Self)",
-    Callback = function()
-        isSpectating = false
-        updateSpectateView()
-        Rayfield:Notify({ Title = "Spectate", Content = "Returned to self.", Duration = 2 })
-    end,
-})
-
-spectateTrackerThread = task.spawn(function()
-    while task.wait(0.1) do
-        if isSpectating and #spectateTargets > 0 and spectateTargets[currentIndex] then
-            local target = spectateTargets[currentIndex]
-            if target.Humanoid and target.RootPart then
-                local currentVel = target.RootPart.AssemblyLinearVelocity
-                local flatVel = Vector3.new(currentVel.X, 0, currentVel.Z)
-                local currentSpeed = math.round(flatVel.Magnitude * 10) / 10
-                
-                local hp = math.round(target.Humanoid.Health)
-                local maxHp = math.round(target.Humanoid.MaxHealth)
-                
-                local distStr = "N/A"
-                local myChar = GlobalCData.Character or LocalPlayer.Character
-                if myChar and myChar:FindFirstChild("HumanoidRootPart") then
-                    local dist = (myChar.HumanoidRootPart.Position - target.RootPart.Position).Magnitude
-                    distStr = tostring(math.round(dist)) .. " studs"
-                end
-                
-                statsLabel:Set("Speed: " .. tostring(currentSpeed) .. " st/s | HP: " .. tostring(hp) .. "/" .. tostring(maxHp) .. " | Dist: " .. distStr, 4483362458)
-            end
-        end
-    end
-end)
